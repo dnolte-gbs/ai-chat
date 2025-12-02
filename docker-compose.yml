@@ -1,0 +1,16 @@
+services:
+  app:
+    build:
+      context: ./src    
+      dockerfile: Dockerfile
+    image: gbs-azure-chatbot:latest
+    container_name: gbs-azure-chatbot
+    ports:
+      - "8085:50505"
+    env_file:
+      - ./src/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:  []
+
+    
