@@ -5,6 +5,7 @@ import asyncio
 import multiprocessing
 import os
 
+from azure.core.credentials import AzureKeyCredential
 from azure.identity.aio import DefaultAzureCredential
 
 
@@ -18,7 +19,14 @@ async def create_index_maybe():
     docker node have started first and must populate index.
     """
     from api.search_index_manager import SearchIndexManager
-    async with DefaultAzureCredential() as creds:
+    
+    # Use API key credential if not in production, otherwise use DefaultAzureCredential
+    if not os.getenv("RUNNING_IN_PRODUCTION"):
+        search_key = os.getenv("AZURE_AI_SEARCH_API_KEY")
+        if not search_key:
+            raise ValueError("AZURE_AI_SEARCH_API_KEY environment variable is required but not set")
+        creds = AzureKeyCredential(search_key)
+        
         endpoint = os.environ.get('AZURE_AI_SEARCH_ENDPOINT')
         if endpoint:
             search_mgr = SearchIndexManager(
@@ -39,6 +47,28 @@ async def create_index_maybe():
                 assert embeddings_path, f'File {embeddings_path} not found.'
                 await search_mgr.upload_documents(embeddings_path)
                 await search_mgr.close()
+    else:
+        async with DefaultAzureCredential() as creds:
+            endpoint = os.environ.get('AZURE_AI_SEARCH_ENDPOINT')
+            if endpoint:
+                search_mgr = SearchIndexManager(
+                    endpoint=endpoint,
+                    credential=creds,
+                    index_name=os.getenv('AZURE_AI_SEARCH_INDEX_NAME'),
+                    dimensions=None,
+                    model=os.getenv('AZURE_AI_EMBED_DEPLOYMENT_NAME'),
+                    embeddings_client=None
+                )
+                # If another application instance already have created the index,
+                # do not upload the documents.
+                if await search_mgr.create_index(
+                  vector_index_dimensions=int(
+                      os.getenv('AZURE_AI_EMBED_DIMENSIONS'))):
+                    embeddings_path = os.path.join(
+                        os.path.dirname(__file__), 'api', 'data', 'embeddings.csv')
+                    assert embeddings_path, f'File {embeddings_path} not found.'
+                    await search_mgr.upload_documents(embeddings_path)
+                    await search_mgr.close()
 
 
 def on_starting(server):

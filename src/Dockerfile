@@ -20,7 +20,8 @@ RUN apt-get update \
 
 # Build React frontend
 WORKDIR /code/frontend
-RUN pnpm install \
+RUN rm -f package-lock.json pnpm-lock.yaml yarn.lock && rm -rf node_modules \
+    && pnpm install --no-frozen-lockfile \
     && pnpm build
 
 RUN apt-get purge -y krb5-user libkrb5-3 libkrb5support0 libgssapi-krb5-2

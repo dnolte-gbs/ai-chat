@@ -11,6 +11,7 @@ import fastapi
 from azure.ai.projects.aio import AIProjectClient
 from azure.ai.inference.aio import ChatCompletionsClient, EmbeddingsClient
 from azure.identity import AzureDeveloperCliCredential, ManagedIdentityCredential
+from azure.core.credentials import AzureKeyCredential
 from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
 
@@ -22,19 +23,29 @@ enable_trace = False
 
 @contextlib.asynccontextmanager
 async def lifespan(app: fastapi.FastAPI):
-    azure_credential: Union[AzureDeveloperCliCredential, ManagedIdentityCredential]
+
+    # Prefer API key if present (for Docker/production)
+    # if os.getenv("AZURE_EXISTING_AIPROJECT_KEY"):
+    #     logger.info("Using AzureKeyCredential for API key authentication.")
+    #     azure_credential = AzureKeyCredential(os.getenv("AZURE_EXISTING_AIPROJECT_KEY"))
+    # el
     if not os.getenv("RUNNING_IN_PRODUCTION"):
         if tenant_id := os.getenv("AZURE_TENANT_ID"):
             logger.info("Using AzureDeveloperCliCredential with tenant_id %s", tenant_id)
             azure_credential = AzureDeveloperCliCredential(tenant_id=tenant_id)
+            azure_search_credential = azure_credential
         else:
-            logger.info("Using AzureDeveloperCliCredential")
-            azure_credential = AzureDeveloperCliCredential()
+            # logger.info("Using AzureDeveloperCliCredential")
+            # azure_credential = AzureDeveloperCliCredential()
+            logger.info("Using AzureKeyCredential for API key authentication.")
+            azure_credential = AzureKeyCredential(os.getenv("AZURE_EXISTING_AIPROJECT_API_KEY"))
+            azure_search_credential = AzureKeyCredential(os.getenv("AZURE_AI_SEARCH_API_KEY"))
     else:
         # User-assigned identity was created and set in api.bicep
         user_identity_client_id = os.getenv("AZURE_CLIENT_ID")
         logger.info("Using ManagedIdentityCredential with client_id %s", user_identity_client_id)
         azure_credential = ManagedIdentityCredential(client_id=user_identity_client_id)
+        azure_search_credential = azure_credential
 
     endpoint = os.environ["AZURE_EXISTING_AIPROJECT_ENDPOINT"]
     project = AIProjectClient(
@@ -83,7 +94,7 @@ async def lifespan(app: fastapi.FastAPI):
     if endpoint and os.getenv('AZURE_AI_SEARCH_INDEX_NAME') and os.getenv('AZURE_AI_EMBED_DEPLOYMENT_NAME'):
         search_index_manager = SearchIndexManager(
             endpoint = endpoint,
-            credential = azure_credential,
+            credential = azure_search_credential,
             index_name = os.getenv('AZURE_AI_SEARCH_INDEX_NAME'),
             dimensions = embed_dimensions,
             model = os.getenv('AZURE_AI_EMBED_DEPLOYMENT_NAME'),
