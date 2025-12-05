@@ -1,0 +1,1 @@
+az acr login --name $env:ACR_NAME

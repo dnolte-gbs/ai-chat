@@ -1,0 +1,1 @@
+az container logs --resource-group $env:RES_GROUP --name gbs-chatbot-container

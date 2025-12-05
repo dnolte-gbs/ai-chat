@@ -1,0 +1,1 @@
+docker push "$($env:ACR_NAME).azurecr.io/gbs-azure-chatbot:latest"
