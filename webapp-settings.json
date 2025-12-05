@@ -1,0 +1,17 @@
+[
+  {
+    "name": "AZURE_AI_SEARCH_ENDPOINT",
+    "value": "@Microsoft.KeyVault(SecretUri=https://gbschatbot-vault.vault.azure.net/secrets/AZURE-AI-SEARCH-ENDPOINT/)",
+    "slotSetting": false
+  },
+  {
+    "name": "AZURE_AI_SEARCH_INDEX_NAME",
+    "value": "@Microsoft.KeyVault(SecretUri=https://gbschatbot-vault.vault.azure.net/secrets/AZURE-AI-SEARCH-INDEX-NAME/)",
+    "slotSetting": false
+  },
+  {
+    "name": "AZURE_AI_SEARCH_API_KEY",
+    "value": "@Microsoft.KeyVault(SecretUri=https://gbschatbot-vault.vault.azure.net/secrets/AZURE-AI-SEARCH-API-KEY/)",
+    "slotSetting": false
+  }
+]
