@@ -14,7 +14,8 @@ RUN apt-get update \
     && apt-get install -y curl \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
-    && npm install -g pnpm@10.4.1 \
+    && corepack enable \
+    && corepack prepare pnpm@10.4.1 --activate \
     && node --version \
     && pnpm --version
 

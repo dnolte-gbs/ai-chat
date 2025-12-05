@@ -122,7 +122,8 @@ export function AgentPreview({ agentDetails }: IAgentPreviewProps): ReactNode {
       }
 
       console.log("[ChatClient] Starting to handle streaming response...");
-      handleMessages(response.body);
+      await handleMessages(response.body);
+      console.log("[ChatClient] Finished handling streaming response.");
     } catch (error: any) {
       setIsResponding(false);
       if (error.name === "AbortError") {
@@ -135,122 +136,143 @@ export function AgentPreview({ agentDetails }: IAgentPreviewProps): ReactNode {
 
   const handleMessages = (
     stream: ReadableStream<Uint8Array<ArrayBufferLike>>
-  ) => {
-    let chatItem: IChatItem | null = null;
-    let accumulatedContent = "";
-    let isStreaming = true;
-    let buffer = "";
+  ): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      let chatItem: IChatItem | null = null;
+      let accumulatedContent = "";
+      let isStreaming = true;
+      let buffer = "";
 
-    // Create a reader for the SSE stream
-    const reader = stream.getReader();
-    const decoder = new TextDecoder();
-    
-    const readStream = async () => {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          console.log("[ChatClient] SSE stream ended by server.");
-          break;
-        }
-
-        // Convert the incoming Uint8Array to text
-        const textChunk = decoder.decode(value, { stream: true });
-        console.log("[ChatClient] Raw chunk from stream:", textChunk);
-
-        buffer += textChunk;
-        let boundary = buffer.indexOf("\n");
-
-        // We process line-by-line.
-        while (boundary !== -1) {
-          const chunk = buffer.slice(0, boundary).trim();
-          buffer = buffer.slice(boundary + 1);
-
-          console.log("[ChatClient] SSE line:", chunk); // log each line we extract
-
-          if (chunk.startsWith("data: ")) {
-            // Attempt to parse JSON
-            const jsonStr = chunk.slice(6);
-            let data;
-            try {
-              data = JSON.parse(jsonStr);
-            } catch (err) {
-              console.error("[ChatClient] Failed to parse JSON:", jsonStr, err);
-              boundary = buffer.indexOf("\n");
-              continue;
-            }
-
-            console.log("[ChatClient] Parsed SSE event:", data);
-
-            if (data.error) {
-              if (!chatItem) {
-                chatItem = createAssistantMessageDiv();
-                console.log(
-                  "[ChatClient] Created new messageDiv for assistant."
-                );
-              }
-
-              setIsResponding(false);
-              appendAssistantMessage(
-                chatItem,
-                data.error.message || "An error occurred.",
-                false
-              );
-              return;
-            }
-
-            // Check the data type to decide how to update the UI
-            if (data.type === "stream_end") {
-              // End of the stream
-              console.log("[ChatClient] Stream end marker received.");
-              setIsResponding(false);
-              
+      // Create a reader for the SSE stream
+      const reader = stream.getReader();
+      const decoder = new TextDecoder();
+      
+      const readStream = async () => {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              console.log("[ChatClient] SSE stream ended by server.");
               break;
-            } 
-            
-            else {
-              if (!chatItem) {
-                chatItem = createAssistantMessageDiv();
-                console.log(
-                  "[ChatClient] Created new messageDiv for assistant."
-                );
+            }
+
+            // Convert the incoming Uint8Array to text
+            const textChunk = decoder.decode(value, { stream: true });
+            console.log("[ChatClient] Raw chunk from stream:", textChunk);
+
+            buffer += textChunk;
+            let boundary = buffer.indexOf("\n");
+
+            // We process line-by-line.
+            while (boundary !== -1) {
+              const chunk = buffer.slice(0, boundary).trim();
+              buffer = buffer.slice(boundary + 1);
+
+              console.log("[ChatClient] SSE line:", chunk); // log each line we extract
+
+              if (chunk.startsWith("data: ")) {
+                // Attempt to parse JSON
+                const jsonStr = chunk.slice(6);
+                let data;
+                try {
+                  data = JSON.parse(jsonStr);
+                } catch (err) {
+                  console.error("[ChatClient] Failed to parse JSON:", jsonStr, err);
+                  boundary = buffer.indexOf("\n");
+                  continue;
+                }
+
+                console.log("[ChatClient] Parsed SSE event:", data);
+
+                if (data.error) {
+                  if (!chatItem) {
+                    chatItem = createAssistantMessageDiv();
+                    console.log(
+                      "[ChatClient] Created new messageDiv for assistant."
+                    );
+                  }
+
+                  setIsResponding(false);
+                  appendAssistantMessage(
+                    chatItem,
+                    data.error.message || "An error occurred.",
+                    false
+                  );
+                  reader.cancel();
+                  resolve();
+                  return;
+                }
+
+                // Check the data type to decide how to update the UI
+                if (data.type === "stream_end") {
+                  // End of the stream
+                  console.log("[ChatClient] Stream end marker received.");
+                  setIsResponding(false);
+                  reader.cancel();
+                  resolve();
+                  return;
+                } 
+                
+                else {
+                  if (!chatItem) {
+                    chatItem = createAssistantMessageDiv();
+                    console.log(
+                      "[ChatClient] Created new messageDiv for assistant."
+                    );
+                  }
+
+                  if (data.type === "completed_message") {
+                    clearAssistantMessage(chatItem);
+                    accumulatedContent = data.content;
+                    isStreaming = false;
+                    console.log(
+                      "[ChatClient] Received completed message:",
+                      accumulatedContent
+                    );
+
+                    setIsResponding(false);
+                  } else {
+                    accumulatedContent += data.content;
+                    console.log(
+                      "[ChatClient] Received streaming chunk:",
+                      data.content
+                    );
+                  }
+
+                //   // Update the UI with the accumulated content
+                  appendAssistantMessage(chatItem, accumulatedContent, isStreaming);
+                }
               }
 
-              if (data.type === "completed_message") {
-                clearAssistantMessage(chatItem);
-                accumulatedContent = data.content;
-                isStreaming = false;
-                console.log(
-                  "[ChatClient] Received completed message:",
-                  accumulatedContent
-                );
-
-                setIsResponding(false);
-              } else {
-                accumulatedContent += data.content;
-                console.log(
-                  "[ChatClient] Received streaming chunk:",
-                  data.content
-                );
-              }
-
-            //   // Update the UI with the accumulated content
-              appendAssistantMessage(chatItem, accumulatedContent, isStreaming);
+              boundary = buffer.indexOf("\n");
             }
           }
-
-          boundary = buffer.indexOf("\n");
+          reader.cancel();
+          resolve();
+        } catch (error) {
+          console.error("[ChatClient] Stream reading error:", error);
+          reader.cancel();
+          reject(error);
         }
-      }
-    };
+      };
 
-    // Catch errors from the stream reading process
-    readStream().catch((error) => {
-      console.error("[ChatClient] Stream reading failed:", error);
+      readStream();
     });
   };
 
   const createAssistantMessageDiv: () => IChatItem = () => {
-    var item = { id: crypto.randomUUID(), content: "", isAnswer: true, more: { time: new Date().toISOString() } };
+    const generateUUID = () => {
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+      }
+      // Fallback UUID generation
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    };
+    var item = { id: generateUUID(), content: "", isAnswer: true, more: { time: new Date().toISOString() } };
     setMessageList((prev) => [...prev, item]);
     return item;
   };

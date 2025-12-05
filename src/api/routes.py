@@ -117,27 +117,32 @@ async def chat_stream_handler(
             else:
                 logger.info("Unable to find the relevant information in the index for the request.")
         try:
+            logger.info("Starting chat completion request")
             accumulated_message = ""
             chat_coroutine = await chat_client.complete(
                 model=model_deployment_name, messages=prompt_messages + messages, stream=True
             )
+            logger.info("Received chat completion stream")
             async for event in chat_coroutine:
                 if event.choices:
                     first_choice = event.choices[0]
                     if first_choice.delta.content:
                         message = first_choice.delta.content
                         accumulated_message += message
+                        logger.debug(f"Streaming chunk: {len(message)} chars")
                         yield serialize_sse_event({
                                         "content": message,
                                         "type": "message",
                                     }
                                 )
 
+            logger.info("Chat completion stream finished")
             yield serialize_sse_event({
                 "content": accumulated_message,
                 "type": "completed_message",
             })                        
         except BaseException as e:
+            logger.error(f"Error in chat stream: {type(e).__name__}: {str(e)}", exc_info=True)
             error_processed = False
             response = "There is an error!"
             try:
@@ -164,8 +169,10 @@ async def chat_stream_handler(
                             "content": response,
                             "type": "completed_message",
                         })
-        yield serialize_sse_event({
-            "type": "stream_end"
-            })
+        finally:
+            logger.info("Chat stream handler completed")
+            yield serialize_sse_event({
+                "type": "stream_end"
+                })
 
     return StreamingResponse(response_stream(), headers=headers)

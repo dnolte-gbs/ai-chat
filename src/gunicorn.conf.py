@@ -93,7 +93,8 @@ num_cpus = multiprocessing.cpu_count()
 workers = (num_cpus * 2) + 1
 worker_class = "uvicorn.workers.UvicornWorker"
 
-timeout = 120
+# Timeout for requests (increased for streaming responses)
+timeout = int(os.getenv('GUNICORN_TIMEOUT', '300'))  # Default 5 minutes
 
 
 if __name__ == "__main__":
