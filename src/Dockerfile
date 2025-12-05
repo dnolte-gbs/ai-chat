@@ -29,6 +29,7 @@ RUN apt-get purge -y krb5-user libkrb5-3 libkrb5support0 libgssapi-krb5-2
 # Return to backend directory
 WORKDIR /code
 
-EXPOSE 50505
+ENV PORT=50505
+EXPOSE $PORT
 
 CMD ["gunicorn", "api.main:create_app"]
